@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Мои дела | Офлайн-приложение</title>
+  <link rel="stylesheet" href="https://unpkg.com/chota@latest">
+  <style>
+    body {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1 {
+      color: #2c3e50;
+      border-bottom: 2px solid #3498db;
+      padding-bottom: 10px;
+    }
+    #todo-form {
+      margin: 20px 0;
+    }
+    #todo-list {
+      list-style: none;
+      padding: 0;
+    }
+    #todo-list li {
+      background: #f8f9fa;
+      margin: 8px 0;
+      padding: 12px 16px;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: all 0.2s;
+    }
+    #todo-list li:hover {
+      background: #e9ecef;
+    }
+    .todo-text {
+      flex: 1;
+      cursor: pointer;
+    }
+    .todo-text.completed {
+      text-decoration: line-through;
+      color: #6c757d;
+    }
+    .delete-btn {
+      background: #dc3545;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .delete-btn:hover {
+      background: #c82333;
+    }
+    .status {
+      font-size: 12px;
+      color: #6c757d;
+      margin-top: 20px;
+      text-align: center;
+    }
+    .offline-badge {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #ffc107;
+      color: #856404;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>📋 Мои дела</h1>
+  <p>Приложение работает офлайн</p>
+
+  <form id="todo-form" class="row">
+    <input class="col-9" type="text" id="todo-input" placeholder="Что нужно сделать?" required>
+    <button class="col-3" type="submit">➕ Добавить</button>
+  </form>
+
+  <ul id="todo-list"></ul>
+  
+  <div class="status" id="status">✅ Данные сохраняются локально</div>
+  <div class="offline-badge" id="offline-badge">📡 Офлайн-режим</div>
+
+  <script src="app.js"></script>
+</body>
+</html>
