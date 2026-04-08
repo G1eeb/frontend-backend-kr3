@@ -2,7 +2,30 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  
+  <!-- Web App Manifest -->
+  <link rel="manifest" href="/manifest.json">
+  
+  <!-- Для Android -->
+  <meta name="mobile-web-app-capable" content="yes">
+  
+  <!-- Цвет темы для браузера -->
+  <meta name="theme-color" content="#3498db">
+  
+  <!-- Для iOS (иконка на домашний экран) -->
+  <link rel="apple-touch-icon" href="/icons/icon-152x152.png">
+  
+  <!-- Для iOS (статус бар) -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Мои дела">
+  
+  <!-- Обычный favicon -->
+  <link rel="icon" href="/icons/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16x16.png">
+  
   <title>Мои дела | Офлайн-приложение</title>
   <link rel="stylesheet" href="https://unpkg.com/chota@latest">
   <style>
@@ -74,6 +97,22 @@
       font-weight: bold;
       display: none;
     }
+    .install-badge {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      background: #3498db;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+      display: none;
+      cursor: pointer;
+    }
+    .install-badge:hover {
+      background: #2980b9;
+    }
   </style>
 </head>
 <body>
@@ -89,6 +128,7 @@
   
   <div class="status" id="status">✅ Данные сохраняются локально</div>
   <div class="offline-badge" id="offline-badge">📡 Офлайн-режим</div>
+  <div class="install-badge" id="install-badge">📱 Установить приложение</div>
 
   <script src="app.js"></script>
 </body>

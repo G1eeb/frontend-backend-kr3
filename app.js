@@ -3,6 +3,10 @@ const form = document.getElementById('todo-form');
 const input = document.getElementById('todo-input');
 const list = document.getElementById('todo-list');
 const offlineBadge = document.getElementById('offline-badge');
+const installBadge = document.getElementById('install-badge');
+
+// Переменная для отслеживания события установки PWA
+let deferredPrompt;
 
 // Загрузка дел из localStorage
 function loadTodos() {
@@ -103,6 +107,40 @@ function updateNetworkStatus() {
     offlineBadge.style.display = 'none';
   }
 }
+
+// Обработка установки PWA
+window.addEventListener('beforeinstallprompt', (e) => {
+  // Предотвращаем автоматическое отображение диалога установки в Chrome
+  e.preventDefault();
+  // Сохраняем событие для последующего использования
+  deferredPrompt = e;
+  // Показываем кнопку установки
+  installBadge.style.display = 'block';
+});
+
+// Обработка клика по кнопке установки
+installBadge.addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  
+  // Показываем диалог установки
+  deferredPrompt.prompt();
+  
+  // Ждём ответа пользователя
+  const { outcome } = await deferredPrompt.userChoice;
+  console.log(`Пользователь ${outcome === 'accepted' ? 'установил' : 'отклонил'} приложение`);
+  
+  // Скрываем кнопку
+  installBadge.style.display = 'none';
+  // Очищаем сохранённое событие
+  deferredPrompt = null;
+});
+
+// Скрываем кнопку установки, если приложение уже установлено
+window.addEventListener('appinstalled', () => {
+  console.log('PWA установлено');
+  installBadge.style.display = 'none';
+  deferredPrompt = null;
+});
 
 // Следим за изменением статуса сети
 window.addEventListener('online', updateNetworkStatus);
