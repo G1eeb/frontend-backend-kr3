@@ -1,7 +1,8 @@
-const CACHE_NAME = 'todo-app-v2'; // Обновлена версия для новых ресурсов
+const STATIC_CACHE = 'static-v2';
+const DYNAMIC_CACHE = 'dynamic-v1';
 
-// Ресурсы для кэширования (добавлены иконки и манифест)
-const ASSETS = [
+// Статические ресурсы (App Shell)
+const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/app.js',
@@ -17,78 +18,74 @@ const ASSETS = [
   '/icons/icon-512x512.png'
 ];
 
-// Установка Service Worker - кэшируем ресурсы
+// Установка - кэшируем App Shell
 self.addEventListener('install', event => {
   console.log('[SW] Установка');
   event.waitUntil(
-    caches.open(CACHE_NAME)
+    caches.open(STATIC_CACHE)
       .then(cache => {
-        console.log('[SW] Кэширование ресурсов');
-        return cache.addAll(ASSETS);
+        console.log('[SW] Кэширование App Shell');
+        return cache.addAll(STATIC_ASSETS);
       })
-      .then(() => {
-        console.log('[SW] Кэширование завершено');
-        return self.skipWaiting(); // Активируем сразу
-      })
-      .catch(err => {
-        console.error('[SW] Ошибка кэширования:', err);
-      })
+      .then(() => self.skipWaiting())
+      .catch(err => console.error('[SW] Ошибка кэширования:', err))
   );
 });
 
-// Активация - очищаем старые кэши
+// Активация - чистим старые кэши
 self.addEventListener('activate', event => {
   console.log('[SW] Активация');
   event.waitUntil(
     caches.keys().then(keys => {
       return Promise.all(
         keys.map(key => {
-          if (key !== CACHE_NAME) {
+          if (key !== STATIC_CACHE && key !== DYNAMIC_CACHE) {
             console.log('[SW] Удаляем старый кэш:', key);
             return caches.delete(key);
           }
         })
       );
-    }).then(() => {
-      console.log('[SW] Активация завершена, берём под контроль клиентов');
-      return self.clients.claim(); // Берём под контроль существующие страницы
-    })
+    }).then(() => self.clients.claim())
   );
 });
 
-// Перехват fetch-запросов - стратегия "кэш с падением на сеть"
+// Стратегии:
+// - Статика (App Shell): Cache First
+// - Контент (/content/*): Network First (с fallback в кэш)
 self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+  
+  // Пропускаем запросы к CDN
+  if (url.origin !== location.origin) return;
+  
+  // Для динамического контента - Network First
+  if (url.pathname.startsWith('/content/')) {
+    event.respondWith(
+      fetch(event.request)
+        .then(networkRes => {
+          if (networkRes && networkRes.status === 200) {
+            const resClone = networkRes.clone();
+            caches.open(DYNAMIC_CACHE).then(cache => {
+              cache.put(event.request, resClone);
+            });
+          }
+          return networkRes;
+        })
+        .catch(() => {
+          return caches.match(event.request)
+            .then(cached => {
+              if (cached) return cached;
+              // Fallback на home если нет в кэше
+              return caches.match('/content/home.html');
+            });
+        })
+    );
+    return;
+  }
+  
+  // Для статики - Cache First
   event.respondWith(
     caches.match(event.request)
-      .then(response => {
-        // Если ресурс есть в кэше - возвращаем его
-        if (response) {
-          return response;
-        }
-        
-        // Иначе делаем запрос в сеть
-        return fetch(event.request)
-          .then(networkResponse => {
-            // Кэшируем успешные ответы для будущих запросов
-            if (networkResponse && networkResponse.status === 200) {
-              const responseToCache = networkResponse.clone();
-              caches.open(CACHE_NAME)
-                .then(cache => {
-                  cache.put(event.request, responseToCache);
-                });
-            }
-            return networkResponse;
-          })
-          .catch(() => {
-            // Если нет сети и ресурса в кэше - возвращаем fallback
-            if (event.request.mode === 'navigate') {
-              return caches.match('/index.html');
-            }
-            return new Response('Ресурс не найден в офлайн-режиме', {
-              status: 404,
-              statusText: 'Not Found'
-            });
-          });
-      })
+      .then(cached => cached || fetch(event.request))
   );
 });

@@ -13,21 +13,20 @@
   <!-- Цвет темы для браузера -->
   <meta name="theme-color" content="#3498db">
   
-  <!-- Для iOS (иконка на домашний экран) -->
+  <!-- Для iOS -->
   <link rel="apple-touch-icon" href="/icons/icon-152x152.png">
-  
-  <!-- Для iOS (статус бар) -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Мои дела">
   
-  <!-- Обычный favicon -->
+  <!-- Favicon -->
   <link rel="icon" href="/icons/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16x16.png">
   
   <title>Мои дела | Офлайн-приложение</title>
   <link rel="stylesheet" href="https://unpkg.com/chota@latest">
+  
   <style>
     body {
       max-width: 600px;
@@ -39,51 +38,20 @@
       border-bottom: 2px solid #3498db;
       padding-bottom: 10px;
     }
-    #todo-form {
+    nav {
       margin: 20px 0;
     }
-    #todo-list {
-      list-style: none;
-      padding: 0;
-    }
-    #todo-list li {
+    .tab {
+      cursor: pointer;
+      padding: 10px;
+      text-align: center;
       background: #f8f9fa;
-      margin: 8px 0;
-      padding: 12px 16px;
       border-radius: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
       transition: all 0.2s;
     }
-    #todo-list li:hover {
-      background: #e9ecef;
-    }
-    .todo-text {
-      flex: 1;
-      cursor: pointer;
-    }
-    .todo-text.completed {
-      text-decoration: line-through;
-      color: #6c757d;
-    }
-    .delete-btn {
-      background: #dc3545;
+    .tab.active {
+      background: #3498db;
       color: white;
-      border: none;
-      border-radius: 4px;
-      padding: 4px 10px;
-      cursor: pointer;
-      font-size: 12px;
-    }
-    .delete-btn:hover {
-      background: #c82333;
-    }
-    .status {
-      font-size: 12px;
-      color: #6c757d;
-      margin-top: 20px;
-      text-align: center;
     }
     .offline-badge {
       position: fixed;
@@ -113,20 +81,24 @@
     .install-badge:hover {
       background: #2980b9;
     }
+    #app-content {
+      margin-top: 2rem;
+    }
   </style>
 </head>
 <body>
   <h1>📋 Мои дела</h1>
   <p>Приложение работает офлайн</p>
 
-  <form id="todo-form" class="row">
-    <input class="col-9" type="text" id="todo-input" placeholder="Что нужно сделать?" required>
-    <button class="col-3" type="submit">➕ Добавить</button>
-  </form>
+  <!-- Навигация (App Shell) -->
+  <nav class="row">
+    <button id="home-btn" class="tab col-6 active">🏠 Главная</button>
+    <button id="about-btn" class="tab col-6">ℹ️ О приложении</button>
+  </nav>
 
-  <ul id="todo-list"></ul>
-  
-  <div class="status" id="status">✅ Данные сохраняются локально</div>
+  <!-- Динамический контент -->
+  <main id="app-content"></main>
+
   <div class="offline-badge" id="offline-badge">📡 Офлайн-режим</div>
   <div class="install-badge" id="install-badge">📱 Установить приложение</div>
 
