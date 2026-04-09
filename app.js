@@ -6,19 +6,11 @@ const offlineBadge = document.getElementById('offline-badge');
 const installBadge = document.getElementById('install-badge');
 
 let deferredPrompt;
-
-// ===== WEBSOCKET =====
-const socket = io('https://localhost:3001', {
-  transports: ['websocket', 'polling'],
-  reconnection: true,
-  reconnectionAttempts: 5
-});
+let socket = null;
 
 // ===== PUSH УВЕДОМЛЕНИЯ =====
-// ВАЖНО: Замените на ваш публичный VAPID-ключ из терминала!
 const VAPID_PUBLIC_KEY = 'BBS93vjmm60dUloa0zki7EYTND5dK2ml6KoUyWRneTcddMn5Bl1DoFuYUHTpFE8me5i-tti3C6eS4KyCV5YhzG0';
 
-// Конвертер base64 → Uint8Array
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
   const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
@@ -30,7 +22,6 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
-// Подписка на push
 async function subscribeToPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     console.warn('Push не поддерживается');
@@ -44,7 +35,7 @@ async function subscribeToPush() {
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
     });
     
-    await fetch('https://localhost:3001/subscribe', {
+    await fetch('/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(subscription)
@@ -56,7 +47,6 @@ async function subscribeToPush() {
   }
 }
 
-// Отписка от push
 async function unsubscribeFromPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   
@@ -64,7 +54,7 @@ async function unsubscribeFromPush() {
   const subscription = await registration.pushManager.getSubscription();
   
   if (subscription) {
-    await fetch('https://localhost:3001/unsubscribe', {
+    await fetch('/unsubscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint: subscription.endpoint })
@@ -75,7 +65,60 @@ async function unsubscribeFromPush() {
   }
 }
 
-// ===== НАВИГАЦИЯ (APP SHELL) =====
+// ===== WEBSOCKET =====
+function initWebSocket() {
+  if (!navigator.onLine) {
+    console.log('📡 Офлайн-режим');
+    return null;
+  }
+  
+  try {
+    const s = io();
+    
+    s.on('connect', () => {
+      console.log('✅ WebSocket подключен!');
+    });
+    
+    s.on('connect_error', (err) => {
+      console.warn('⚠️ WebSocket ошибка:', err.message);
+    });
+    
+    s.on('taskAdded', (task) => {
+      console.log('🔄 Новая задача:', task);
+      showToast(`✨ ${task.text}`);
+      
+      // Обновляем список задач
+      if (document.getElementById('todo-list')) {
+        loadTodos();
+      }
+    });
+    
+    return s;
+  } catch (err) {
+    console.error('❌ Ошибка WebSocket:', err);
+    return null;
+  }
+}
+
+function showToast(message) {
+  const toast = document.createElement('div');
+  toast.textContent = message;
+  toast.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #28a745;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    z-index: 1000;
+    animation: slideIn 0.3s ease;
+  `;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+// ===== НАВИГАЦИЯ =====
 function setActiveButton(activeId) {
   [homeBtn, aboutBtn].forEach(btn => btn.classList.remove('active'));
   document.getElementById(activeId).classList.add('active');
@@ -84,7 +127,6 @@ function setActiveButton(activeId) {
 async function loadContent(page) {
   try {
     const response = await fetch(`/content/${page}.html`);
-    if (!response.ok) throw new Error('Сеть ответила с ошибкой');
     const html = await response.text();
     contentDiv.innerHTML = html;
     
@@ -93,7 +135,7 @@ async function loadContent(page) {
     }
   } catch (err) {
     console.error('Ошибка загрузки:', err);
-    contentDiv.innerHTML = '<p class="is-center" style="color: red;">❌ Ошибка загрузки страницы. Проверьте соединение.</p>';
+    contentDiv.innerHTML = '<p style="color: red; text-align: center;">❌ Ошибка загрузки</p>';
   }
 }
 
@@ -119,27 +161,12 @@ function renderTodos(todos) {
 
   list.innerHTML = todos.map((todo, index) => `
     <li style="background: #f8f9fa; margin: 8px 0; padding: 12px 16px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-      <span class="todo-text ${todo.completed ? 'completed' : ''}" data-index="${index}" style="flex: 1; cursor: pointer; ${todo.completed ? 'text-decoration: line-through; color: #6c757d;' : ''}">
+      <span style="flex: 1; cursor: pointer; ${todo.completed ? 'text-decoration: line-through; color: #6c757d;' : ''}" onclick="window.toggleTodo(${index})">
         ${escapeHtml(todo.text)}
       </span>
-      <button class="delete-btn" data-index="${index}" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 10px; cursor: pointer;">🗑 Удалить</button>
+      <button onclick="window.deleteTodo(${index})" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 10px; cursor: pointer;">🗑</button>
     </li>
   `).join('');
-
-  document.querySelectorAll('.todo-text').forEach(el => {
-    el.addEventListener('click', (e) => {
-      const index = parseInt(e.currentTarget.dataset.index);
-      toggleTodo(index);
-    });
-  });
-
-  document.querySelectorAll('.delete-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const index = parseInt(btn.dataset.index);
-      deleteTodo(index);
-    });
-  });
 }
 
 function escapeHtml(text) {
@@ -147,6 +174,20 @@ function escapeHtml(text) {
   div.textContent = text;
   return div.innerHTML;
 }
+
+window.toggleTodo = function(index) {
+  const todos = JSON.parse(localStorage.getItem('todos') || '[]');
+  if (todos[index]) {
+    todos[index].completed = !todos[index].completed;
+    saveTodos(todos);
+  }
+};
+
+window.deleteTodo = function(index) {
+  const todos = JSON.parse(localStorage.getItem('todos') || '[]');
+  todos.splice(index, 1);
+  saveTodos(todos);
+};
 
 function addTodo(text) {
   const todos = JSON.parse(localStorage.getItem('todos') || '[]');
@@ -159,22 +200,9 @@ function addTodo(text) {
   todos.push(newTodo);
   saveTodos(todos);
   
-  // === ОТПРАВКА ЧЕРЕЗ WEBSOCKET ===
-  socket.emit('newTask', { text: text, id: newTodo.id });
-}
-
-function toggleTodo(index) {
-  const todos = JSON.parse(localStorage.getItem('todos') || '[]');
-  if (todos[index]) {
-    todos[index].completed = !todos[index].completed;
-    saveTodos(todos);
+  if (socket && socket.connected) {
+    socket.emit('newTask', { text: text, id: newTodo.id });
   }
-}
-
-function deleteTodo(index) {
-  const todos = JSON.parse(localStorage.getItem('todos') || '[]');
-  todos.splice(index, 1);
-  saveTodos(todos);
 }
 
 function initNotes() {
@@ -196,47 +224,9 @@ function initNotes() {
   });
 }
 
-// ===== ПОЛУЧЕНИЕ СОБЫТИЙ ОТ СЕРВЕРА =====
-socket.on('taskAdded', (task) => {
-  console.log('🔄 Задача от другого клиента:', task);
-  
-  // Показываем всплывающее сообщение
-  const notification = document.createElement('div');
-  notification.textContent = `✨ Новая задача: ${task.text}`;
-  notification.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: #28a745;
-    color: white;
-    padding: 12px 20px;
-    border-radius: 8px;
-    z-index: 1000;
-    animation: slideIn 0.3s ease;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-  `;
-  
-  // Добавляем анимацию
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes slideIn {
-      from { transform: translateX(100%); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-  `;
-  document.head.appendChild(style);
-  
-  document.body.appendChild(notification);
-  setTimeout(() => notification.remove(), 3000);
-});
-
-// ===== СТАТУС СЕТИ И PWA =====
+// ===== СТАТУС СЕТИ =====
 function updateNetworkStatus() {
-  if (!navigator.onLine) {
-    offlineBadge.style.display = 'block';
-  } else {
-    offlineBadge.style.display = 'none';
-  }
+  offlineBadge.style.display = navigator.onLine ? 'none' : 'block';
 }
 
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -249,33 +239,36 @@ installBadge.addEventListener('click', async () => {
   if (!deferredPrompt) return;
   deferredPrompt.prompt();
   const { outcome } = await deferredPrompt.userChoice;
-  console.log(`Пользователь ${outcome === 'accepted' ? 'установил' : 'отклонил'} приложение`);
   installBadge.style.display = 'none';
   deferredPrompt = null;
 });
 
-window.addEventListener('appinstalled', () => {
-  console.log('PWA установлено');
-  installBadge.style.display = 'none';
-  deferredPrompt = null;
+window.addEventListener('online', () => {
+  updateNetworkStatus();
+  if (!socket) {
+    socket = initWebSocket();
+  }
 });
 
-window.addEventListener('online', updateNetworkStatus);
-window.addEventListener('offline', updateNetworkStatus);
+window.addEventListener('offline', () => {
+  updateNetworkStatus();
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
+});
 
 // ===== РЕГИСТРАЦИЯ SERVICE WORKER =====
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
       const registration = await navigator.serviceWorker.register('/sw.js');
-      console.log('✅ Service Worker зарегистрирован, scope:', registration.scope);
+      console.log('✅ Service Worker зарегистрирован');
       
-      // ===== ЛОГИКА КНОПОК PUSH =====
       const enableBtn = document.getElementById('enable-push');
       const disableBtn = document.getElementById('disable-push');
       
       if (enableBtn && disableBtn) {
-        // Проверяем, есть ли уже активная подписка
         const subscription = await registration.pushManager.getSubscription();
         if (subscription) {
           enableBtn.style.display = 'none';
@@ -283,16 +276,15 @@ if ('serviceWorker' in navigator) {
         }
         
         enableBtn.addEventListener('click', async () => {
-          // Проверяем разрешение на уведомления
           if (Notification.permission === 'denied') {
-            alert('⚠️ Уведомления запрещены. Разрешите их в настройках браузера.');
+            alert('Разрешите уведомления в настройках браузера');
             return;
           }
           
           if (Notification.permission === 'default') {
             const permission = await Notification.requestPermission();
             if (permission !== 'granted') {
-              alert('⚠️ Необходимо разрешить уведомления.');
+              alert('Необходимо разрешить уведомления');
               return;
             }
           }
@@ -310,14 +302,12 @@ if ('serviceWorker' in navigator) {
       }
       
     } catch (err) {
-      console.error('❌ Ошибка регистрации Service Worker:', err);
+      console.error('❌ Ошибка регистрации:', err);
     }
   });
-} else {
-  console.log('Service Worker не поддерживается этим браузером');
 }
 
-// ===== ЗАГРУЗКА СТАРТОВОЙ СТРАНИЦЫ =====
+// ===== ЗАПУСК =====
 homeBtn.addEventListener('click', () => {
   setActiveButton('home-btn');
   loadContent('home');
@@ -328,5 +318,6 @@ aboutBtn.addEventListener('click', () => {
   loadContent('about');
 });
 
+socket = initWebSocket();
 updateNetworkStatus();
 loadContent('home');

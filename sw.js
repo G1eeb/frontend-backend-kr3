@@ -1,4 +1,4 @@
-const STATIC_CACHE = 'static-v3';
+const STATIC_CACHE = 'static-v4';
 const DYNAMIC_CACHE = 'dynamic-v1';
 
 // Статические ресурсы (App Shell)
@@ -15,16 +15,18 @@ const STATIC_ASSETS = [
   '/icons/icon-152x152.png',
   '/icons/icon-192x192.png',
   '/icons/icon-384x384.png',
-  '/icons/icon-512x512.png'
+  '/icons/icon-512x512.png',
+  '/content/home.html',
+  '/content/about.html'
 ];
 
-// Установка - кэшируем App Shell
+// Установка - кэшируем всё
 self.addEventListener('install', event => {
   console.log('[SW] Установка');
   event.waitUntil(
     caches.open(STATIC_CACHE)
       .then(cache => {
-        console.log('[SW] Кэширование App Shell');
+        console.log('[SW] Кэширование ресурсов');
         return cache.addAll(STATIC_ASSETS);
       })
       .then(() => self.skipWaiting())
@@ -32,7 +34,7 @@ self.addEventListener('install', event => {
   );
 });
 
-// Активация - чистим старые кэши
+// Активация
 self.addEventListener('activate', event => {
   console.log('[SW] Активация');
   event.waitUntil(
@@ -49,57 +51,60 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Стратегии:
-// - Статика (App Shell): Cache First
-// - Контент (/content/*): Network First (с fallback в кэш)
+// Обработка запросов
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   
-  // Пропускаем запросы к CDN
+  // Пропускаем Socket.IO
+  if (url.pathname.includes('/socket.io/')) {
+    return;
+  }
+  
+  // Пропускаем CDN
   if (url.origin !== location.origin) return;
   
-  // Игнорируем запросы к .well-known
-  if (url.pathname.includes('.well-known')) {
-    return;
-  }
-  
-  // Для динамического контента - Network First
-  if (url.pathname.startsWith('/content/')) {
-    event.respondWith(
-      fetch(event.request)
-        .then(networkRes => {
-          if (networkRes && networkRes.status === 200) {
-            const resClone = networkRes.clone();
-            caches.open(DYNAMIC_CACHE).then(cache => {
-              cache.put(event.request, resClone);
-            });
-          }
-          return networkRes;
-        })
-        .catch(() => {
-          return caches.match(event.request)
-            .then(cached => {
-              if (cached) return cached;
-              return caches.match('/content/home.html');
-            });
-        })
-    );
-    return;
-  }
-  
-  // Для статики - Cache First
+  // Для всех запросов к нашему сайту - Cache First с fallback
   event.respondWith(
     caches.match(event.request)
-      .then(cached => cached || fetch(event.request))
+      .then(cachedResponse => {
+        if (cachedResponse) {
+          // Возвращаем из кэша
+          return cachedResponse;
+        }
+        
+        // Если нет в кэше, идём в сеть
+        return fetch(event.request)
+          .then(networkResponse => {
+            // Сохраняем в кэш для будущих офлайн-запросов
+            if (networkResponse && networkResponse.status === 200) {
+              const responseToCache = networkResponse.clone();
+              caches.open(DYNAMIC_CACHE).then(cache => {
+                cache.put(event.request, responseToCache);
+              });
+            }
+            return networkResponse;
+          })
+          .catch(() => {
+            // Если офлайн и нет в кэше, возвращаем заглушку
+            if (url.pathname.startsWith('/content/')) {
+              return caches.match('/content/home.html');
+            }
+            return caches.match('/index.html');
+          });
+      })
   );
 });
 
-// ===== PUSH УВЕДОМЛЕНИЯ =====
+// Push уведомления
 self.addEventListener('push', (event) => {
   let data = { title: '📋 Новое уведомление', body: '' };
   
   if (event.data) {
-    data = event.data.json();
+    try {
+      data = event.data.json();
+    } catch (e) {
+      data.body = event.data.text();
+    }
   }
   
   const options = {
@@ -117,7 +122,6 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// Обработка клика по уведомлению
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
