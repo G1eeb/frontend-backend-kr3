@@ -1,4 +1,4 @@
-const STATIC_CACHE = 'static-v2';
+const STATIC_CACHE = 'static-v3';
 const DYNAMIC_CACHE = 'dynamic-v1';
 
 // Статические ресурсы (App Shell)
@@ -58,6 +58,11 @@ self.addEventListener('fetch', event => {
   // Пропускаем запросы к CDN
   if (url.origin !== location.origin) return;
   
+  // Игнорируем запросы к .well-known
+  if (url.pathname.includes('.well-known')) {
+    return;
+  }
+  
   // Для динамического контента - Network First
   if (url.pathname.startsWith('/content/')) {
     event.respondWith(
@@ -75,7 +80,6 @@ self.addEventListener('fetch', event => {
           return caches.match(event.request)
             .then(cached => {
               if (cached) return cached;
-              // Fallback на home если нет в кэше
               return caches.match('/content/home.html');
             });
         })
@@ -87,5 +91,36 @@ self.addEventListener('fetch', event => {
   event.respondWith(
     caches.match(event.request)
       .then(cached => cached || fetch(event.request))
+  );
+});
+
+// ===== PUSH УВЕДОМЛЕНИЯ =====
+self.addEventListener('push', (event) => {
+  let data = { title: '📋 Новое уведомление', body: '' };
+  
+  if (event.data) {
+    data = event.data.json();
+  }
+  
+  const options = {
+    body: data.body,
+    icon: '/icons/icon-192x192.png',
+    badge: '/icons/icon-72x72.png',
+    vibrate: [200, 100, 200],
+    data: {
+      url: '/'
+    }
+  };
+  
+  event.waitUntil(
+    self.registration.showNotification(data.title, options)
+  );
+});
+
+// Обработка клика по уведомлению
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.openWindow('/')
   );
 });

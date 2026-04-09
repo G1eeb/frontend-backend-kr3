@@ -84,6 +84,19 @@
     #app-content {
       margin-top: 2rem;
     }
+    .button.success {
+      background: #28a745;
+      color: white;
+    }
+    .button.error {
+      background: #dc3545;
+      color: white;
+    }
+    footer {
+      margin-top: 2rem;
+      padding: 1rem;
+      border-top: 1px solid #eee;
+    }
   </style>
 </head>
 <body>
@@ -99,9 +112,17 @@
   <!-- Динамический контент -->
   <main id="app-content"></main>
 
+  <!-- Кнопки для push-уведомлений -->
+  <footer class="is-center">
+    <button id="enable-push" class="button success">🔔 Включить уведомления</button>
+    <button id="disable-push" class="button error" style="display:none;">🔕 Отключить уведомления</button>
+  </footer>
+
   <div class="offline-badge" id="offline-badge">📡 Офлайн-режим</div>
   <div class="install-badge" id="install-badge">📱 Установить приложение</div>
 
+  <!-- Socket.IO клиент -->
+  <script src="/socket.io/socket.io.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

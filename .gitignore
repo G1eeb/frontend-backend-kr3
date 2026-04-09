@@ -73,3 +73,6 @@ Thumbs.db
 # Докер (если используете)
 docker-compose.override.yml
 .docker/
+
+# Ключи
+keys.txt
