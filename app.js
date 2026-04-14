@@ -87,9 +87,9 @@ function initWebSocket() {
       console.log('🔄 Новая задача:', task);
       showToast(`✨ ${task.text}`);
       
-      // Обновляем список задач
-      if (document.getElementById('todo-list')) {
-        loadTodos();
+      // Обновляем список заметок
+      if (document.getElementById('notes-list')) {
+        loadNotes();
       }
     });
     
@@ -139,34 +139,47 @@ async function loadContent(page) {
   }
 }
 
-// ===== ЛОГИКА ЗАМЕТОК =====
-function loadTodos() {
-  const todos = JSON.parse(localStorage.getItem('todos') || '[]');
-  renderTodos(todos);
+// ===== ЛОГИКА ЗАМЕТОК С НАПОМИНАНИЯМИ =====
+function loadNotes() {
+  const notes = JSON.parse(localStorage.getItem('notes') || '[]');
+  renderNotes(notes);
 }
 
-function saveTodos(todos) {
-  localStorage.setItem('todos', JSON.stringify(todos));
-  renderTodos(todos);
+function saveNotes(notes) {
+  localStorage.setItem('notes', JSON.stringify(notes));
+  renderNotes(notes);
 }
 
-function renderTodos(todos) {
-  const list = document.getElementById('todo-list');
+function renderNotes(notes) {
+  const list = document.getElementById('notes-list');
   if (!list) return;
   
-  if (todos.length === 0) {
-    list.innerHTML = '<li style="text-align: center; color: #6c757d;">✨ Нет дел. Добавьте новую задачу!</li>';
+  if (notes.length === 0) {
+    list.innerHTML = '<li style="text-align: center; color: #6c757d;">✨ Нет заметок. Добавьте новую заметку!</li>';
     return;
   }
 
-  list.innerHTML = todos.map((todo, index) => `
-    <li style="background: #f8f9fa; margin: 8px 0; padding: 12px 16px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-      <span style="flex: 1; cursor: pointer; ${todo.completed ? 'text-decoration: line-through; color: #6c757d;' : ''}" onclick="window.toggleTodo(${index})">
-        ${escapeHtml(todo.text)}
-      </span>
-      <button onclick="window.deleteTodo(${index})" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 10px; cursor: pointer;">🗑</button>
-    </li>
-  `).join('');
+  list.innerHTML = notes.map((note, index) => {
+    let reminderInfo = '';
+    if (note.reminder) {
+      const date = new Date(note.reminder);
+      reminderInfo = `<br><small style="color: #e67e22;">⏰ Напоминание: ${date.toLocaleString()}</small>`;
+    }
+    return `
+      <li class="card" style="margin-bottom: 0.5rem; padding: 12px 16px; background: #f8f9fa; border-radius: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <span style="flex: 1; ${note.completed ? 'text-decoration: line-through; color: #6c757d;' : ''}">
+            ${escapeHtml(note.text)}
+            ${reminderInfo}
+          </span>
+          <div>
+            <button onclick="window.toggleNote(${index})" style="background: #28a745; color: white; border: none; border-radius: 4px; padding: 4px 8px; margin-right: 4px; cursor: pointer;">✓</button>
+            <button onclick="window.deleteNote(${index})" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer;">🗑</button>
+          </div>
+        </div>
+      </li>
+    `;
+  }).join('');
 }
 
 function escapeHtml(text) {
@@ -175,58 +188,117 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-window.toggleTodo = function(index) {
-  const todos = JSON.parse(localStorage.getItem('todos') || '[]');
-  if (todos[index]) {
-    todos[index].completed = !todos[index].completed;
-    saveTodos(todos);
+window.toggleNote = function(index) {
+  const notes = JSON.parse(localStorage.getItem('notes') || '[]');
+  if (notes[index]) {
+    notes[index].completed = !notes[index].completed;
+    saveNotes(notes);
   }
 };
 
-window.deleteTodo = function(index) {
-  const todos = JSON.parse(localStorage.getItem('todos') || '[]');
-  todos.splice(index, 1);
-  saveTodos(todos);
+window.deleteNote = function(index) {
+  const notes = JSON.parse(localStorage.getItem('notes') || '[]');
+  const deletedNote = notes[index];
+  notes.splice(index, 1);
+  saveNotes(notes);
+  
+  // Отправляем запрос на сервер для отмены запланированного напоминания
+  if (deletedNote && deletedNote.id && deletedNote.reminder && socket && socket.connected) {
+    socket.emit('cancelReminder', { id: deletedNote.id });
+  }
 };
 
-function addTodo(text) {
-  const todos = JSON.parse(localStorage.getItem('todos') || '[]');
-  const newTodo = {
+function addNote(text) {
+  const notes = JSON.parse(localStorage.getItem('notes') || '[]');
+  const newNote = {
     id: Date.now(),
     text: text,
     completed: false,
+    reminder: null,
     createdAt: new Date().toISOString()
   };
-  todos.push(newTodo);
-  saveTodos(todos);
+  notes.push(newNote);
+  saveNotes(notes);
   
   if (socket && socket.connected) {
-    socket.emit('newTask', { text: text, id: newTodo.id });
+    socket.emit('newTask', { text: text, id: newNote.id });
+  }
+}
+
+function addReminder(text, reminderTime) {
+  const notes = JSON.parse(localStorage.getItem('notes') || '[]');
+  const newNote = {
+    id: Date.now(),
+    text: text,
+    completed: false,
+    reminder: reminderTime,
+    createdAt: new Date().toISOString()
+  };
+  notes.push(newNote);
+  saveNotes(notes);
+  
+  // Отправляем на сервер для планирования push-уведомления
+  if (socket && socket.connected) {
+    socket.emit('newReminder', {
+      id: newNote.id,
+      text: text,
+      reminderTime: reminderTime
+    });
   }
 }
 
 function initNotes() {
-  const form = document.getElementById('todo-form');
-  const input = document.getElementById('todo-input');
+  const todoForm = document.getElementById('todo-form');
+  const todoInput = document.getElementById('todo-input');
+  const reminderForm = document.getElementById('reminder-form');
+  const reminderText = document.getElementById('reminder-text');
+  const reminderTime = document.getElementById('reminder-time');
   
-  if (!form) return;
+  if (!todoForm) return;
   
-  loadTodos();
+  loadNotes();
   
-  form.addEventListener('submit', (e) => {
+  todoForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    const text = input.value.trim();
+    const text = todoInput.value.trim();
     if (text) {
-      addTodo(text);
-      input.value = '';
-      input.focus();
+      addNote(text);
+      todoInput.value = '';
+      todoInput.focus();
     }
   });
+  
+  if (reminderForm) {
+    reminderForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = reminderText.value.trim();
+      const time = reminderTime.value;
+      
+      if (text && time) {
+        const reminderTimestamp = new Date(time).getTime();
+        const now = Date.now();
+        
+        if (reminderTimestamp <= now) {
+          showToast('⚠️ Время напоминания должно быть в будущем');
+          return;
+        }
+        
+        addReminder(text, reminderTimestamp);
+        reminderText.value = '';
+        reminderTime.value = '';
+        reminderText.focus();
+        showToast(`🔔 Напоминание запланировано на ${new Date(reminderTimestamp).toLocaleString()}`);
+      }
+    });
+  }
 }
 
 // ===== СТАТУС СЕТИ =====
 function updateNetworkStatus() {
-  offlineBadge.style.display = navigator.onLine ? 'none' : 'block';
+  const badge = document.getElementById('offline-badge');
+  if (badge) {
+    badge.style.display = navigator.onLine ? 'none' : 'block';
+  }
 }
 
 window.addEventListener('beforeinstallprompt', (e) => {

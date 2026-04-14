@@ -1,4 +1,4 @@
-const STATIC_CACHE = 'static-v4';
+const STATIC_CACHE = 'static-v5';
 const DYNAMIC_CACHE = 'dynamic-v1';
 
 // Статические ресурсы (App Shell)
@@ -68,14 +68,11 @@ self.addEventListener('fetch', event => {
     caches.match(event.request)
       .then(cachedResponse => {
         if (cachedResponse) {
-          // Возвращаем из кэша
           return cachedResponse;
         }
         
-        // Если нет в кэше, идём в сеть
         return fetch(event.request)
           .then(networkResponse => {
-            // Сохраняем в кэш для будущих офлайн-запросов
             if (networkResponse && networkResponse.status === 200) {
               const responseToCache = networkResponse.clone();
               caches.open(DYNAMIC_CACHE).then(cache => {
@@ -85,7 +82,6 @@ self.addEventListener('fetch', event => {
             return networkResponse;
           })
           .catch(() => {
-            // Если офлайн и нет в кэше, возвращаем заглушку
             if (url.pathname.startsWith('/content/')) {
               return caches.match('/content/home.html');
             }
@@ -95,13 +91,20 @@ self.addEventListener('fetch', event => {
   );
 });
 
-// Push уведомления
+// Push уведомления с кнопкой "Отложить"
 self.addEventListener('push', (event) => {
-  let data = { title: '📋 Новое уведомление', body: '' };
+  let data = { 
+    title: '🔔 Новое уведомление', 
+    body: '',
+    reminderId: null 
+  };
   
   if (event.data) {
     try {
-      data = event.data.json();
+      const parsedData = event.data.json();
+      data.title = parsedData.title || data.title;
+      data.body = parsedData.body || '';
+      data.reminderId = parsedData.reminderId || null;
     } catch (e) {
       data.body = event.data.text();
     }
@@ -113,18 +116,82 @@ self.addEventListener('push', (event) => {
     badge: '/icons/icon-72x72.png',
     vibrate: [200, 100, 200],
     data: {
-      url: '/'
+      reminderId: data.reminderId,
+      url: '/',
+      timestamp: Date.now()
     }
   };
+  
+  // Добавляем кнопку "Отложить на 10 секунд" только если есть reminderId
+  if (data.reminderId) {
+    options.actions = [
+      { action: 'snooze', title: '⏰ Отложить на 10 секунд' }
+    ];
+    options.requireInteraction = true; // Уведомление не исчезает автоматически
+  }
   
   event.waitUntil(
     self.registration.showNotification(data.title, options)
   );
 });
 
+// Обработка кликов по уведомлениям и кнопкам
 self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  event.waitUntil(
-    clients.openWindow('/')
-  );
+  const notification = event.notification;
+  const action = event.action;
+  const reminderId = notification.data?.reminderId;
+  
+  notification.close();
+  
+  if (action === 'snooze' && reminderId) {
+    console.log('[SW] Откладываем напоминание ID:', reminderId);
+    
+    // Отправляем запрос на сервер для откладывания
+    event.waitUntil(
+      fetch(`/snooze?reminderId=${reminderId}`, { 
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      .then(response => {
+        if (response.ok) {
+          console.log('[SW] Напоминание успешно отложено на 10 секунд');
+          // Показываем подтверждение пользователю
+          return self.registration.showNotification('✅ Напоминание отложено', {
+            body: 'Вы получите его через 10 секунд',
+            icon: '/icons/icon-192x192.png',
+            badge: '/icons/icon-72x72.png'
+          });
+        } else {
+          console.error('[SW] Ошибка при откладывании:', response.status);
+          throw new Error(`HTTP ${response.status}`);
+        }
+      })
+      .catch(err => {
+        console.error('[SW] Snooze failed:', err);
+        // Показываем ошибку пользователю
+        return self.registration.showNotification('❌ Ошибка', {
+          body: 'Не удалось отложить напоминание',
+          icon: '/icons/icon-192x192.png',
+          badge: '/icons/icon-72x72.png'
+        });
+      })
+    );
+  } else {
+    // При клике на само уведомление открываем приложение
+    event.waitUntil(
+      clients.matchAll({ type: 'window', includeUncontrolled: true })
+        .then(windowClients => {
+          for (let client of windowClients) {
+            if (client.url === '/' && 'focus' in client) {
+              return client.focus();
+            }
+          }
+          if (clients.openWindow) {
+            return clients.openWindow('/');
+          }
+        })
+    );
+  }
 });
